@@ -2911,4 +2911,300 @@
             
             // Update player's rank display
             const playerData = players.find(p => p.name === gameState.playerName);
-            if (playerData)
+            if (playerData) {
+                document.getElementById('my-player-name').textContent = playerData.name;
+                document.getElementById('my-business-name').textContent = playerData.businessName;
+                document.getElementById('my-rank').textContent = `#${playerData.rank}`;
+                document.getElementById('my-score').textContent = formatNumber(playerData.score);
+            }
+        }
+
+        function refreshLeaderboards() {
+            simulateLeaderboardData();
+            const activeTab = document.querySelector('.leaderboard-tab.active');
+            if (activeTab) {
+                updateLeaderboardTable(activeTab.getAttribute('data-leaderboard'));
+            }
+            addEvent("Leaderboards refreshed!", "info");
+        }
+
+        // ====== LEVELING SYSTEM ======
+        function checkLevelUp() {
+            while (gameState.experience >= gameState.experienceToNextLevel) {
+                gameState.experience -= gameState.experienceToNextLevel;
+                gameState.businessLevel++;
+                gameState.experienceToNextLevel = Math.round(gameState.experienceToNextLevel * 1.5);
+                
+                // Level up rewards
+                const levelBonus = gameState.businessLevel * 1000;
+                gameState.bizzy += levelBonus;
+                
+                // Add event
+                addEvent(`Business Level Up! Reached level ${gameState.businessLevel}. Bonus: $${formatNumber(levelBonus)}`, "success");
+                
+                // Check career level (every 5 business levels)
+                if (gameState.businessLevel % 5 === 0) {
+                    gameState.careerLevel++;
+                    addEvent(`Career Level Up! Reached level ${gameState.careerLevel}.`, "success");
+                }
+            }
+            
+            updateLevelingUI();
+        }
+
+        function updateLevelingUI() {
+            const progressPercent = (gameState.experience / gameState.experienceToNextLevel) * 100;
+            
+            document.getElementById('business-level-display').textContent = gameState.businessLevel;
+            document.getElementById('prestige-level').textContent = gameState.prestigeLevel;
+            document.getElementById('current-xp').textContent = formatNumber(gameState.experience);
+            document.getElementById('xp-needed').textContent = formatNumber(gameState.experienceToNextLevel);
+            document.getElementById('business-level-progress').style.width = `${progressPercent}%`;
+            
+            document.getElementById('career-level').textContent = gameState.careerLevel;
+            document.getElementById('total-experience').textContent = formatNumber(gameState.experience);
+            document.getElementById('next-level-xp').textContent = formatNumber(gameState.experienceToNextLevel);
+            document.getElementById('career-progress').style.width = `${progressPercent}%`;
+            
+            // Update level bonus based on level
+            const levelBonus = gameState.businessLevel * 2.5;
+            document.getElementById('level-bonus').textContent = `${levelBonus}%`;
+        }
+
+        function prestigeReset() {
+            if (gameState.businessLevel < 50) {
+                alert("You need to reach Business Level 50 to prestige!");
+                return;
+            }
+            
+            if (!confirm("Prestige will reset your business level and some progress, but give you permanent bonuses. Continue?")) {
+                return;
+            }
+            
+            // Prestige rewards
+            gameState.prestigeLevel++;
+            gameState.businessLevel = 1;
+            gameState.experience = 0;
+            gameState.experienceToNextLevel = 1000;
+            
+            // Prestige bonus (permanent)
+            const prestigeBonus = gameState.prestigeLevel * 0.1; // 10% per prestige
+            
+            // Add event
+            addEvent(`Prestiged! Reached Prestige Level ${gameState.prestigeLevel}.`, "success");
+            
+            updateLevelingUI();
+        }
+
+        // ====== UTILITY FUNCTIONS ======
+        function formatNumber(num) {
+            if (num >= 1000000) {
+                return (num / 1000000).toFixed(2) + 'M';
+            }
+            if (num >= 1000) {
+                return (num / 1000).toFixed(1) + 'K';
+            }
+            return num.toFixed(2);
+        }
+
+        function addEvent(message, type = "info") {
+            const event = {
+                message,
+                type,
+                timestamp: new Date().toLocaleTimeString()
+            };
+            
+            gameState.eventLog.unshift(event);
+            
+            // Keep only last 10 events
+            if (gameState.eventLog.length > 10) {
+                gameState.eventLog.pop();
+            }
+            
+            updateEventLog();
+        }
+
+        function updateEventLog() {
+            const container = document.getElementById('event-log-list');
+            container.innerHTML = '';
+            
+            gameState.eventLog.forEach(event => {
+                const eventEl = document.createElement('div');
+                eventEl.className = 'event-item';
+                eventEl.style.borderLeftColor = 
+                    event.type === 'success' ? '#2ecc71' : 
+                    event.type === 'error' ? '#e74c3c' : 
+                    event.type === 'warning' ? '#f39c12' : '#3498db';
+                
+                eventEl.innerHTML = `
+                    <div class="event-message">${event.message}</div>
+                    <div class="event-time">${event.timestamp}</div>
+                `;
+                
+                container.appendChild(eventEl);
+            });
+        }
+
+        function updateUI() {
+            // Update currency displays
+            document.getElementById('bizzy-amount').textContent = formatNumber(gameState.bizzy);
+            document.getElementById('bitcoin-amount').textContent = gameState.crypto.bitcoin.toFixed(4);
+            document.getElementById('ethereum-amount').textContent = gameState.crypto.ethereum.toFixed(2);
+            document.getElementById('reputation-amount').textContent = gameState.reputation;
+            
+            // Update stats
+            document.getElementById('player-job').textContent = gameState.job ? gameState.job.title : 'Unemployed';
+            document.getElementById('businesses-owned').textContent = gameState.businesses.length;
+            document.getElementById('coding-skill').textContent = `Lv. ${gameState.codingSkill}`;
+            
+            // Calculate net worth
+            let netWorth = gameState.bizzy;
+            Object.entries(gameState.crypto).forEach(([key, value]) => {
+                netWorth += value * (gameState.cryptoValues[key] || 0);
+            });
+            gameState.businesses.forEach(business => {
+                netWorth += business.dailyRevenue * 30; // Estimate 30 days revenue
+            });
+            
+            document.getElementById('net-worth').textContent = formatNumber(netWorth);
+            
+            // Update jobs completed
+            const jobsCompleted = gameState.job ? 1 : 0; // Simplified
+            document.getElementById('jobs-completed').textContent = jobsCompleted;
+            
+            // Update crypto portfolio
+            updateCryptoPortfolio();
+        }
+
+        function startGameTimer() {
+            // Game timer for day progression
+            setInterval(() => {
+                // This would update business revenues, pay salaries, etc.
+                updateBusinessRevenues();
+            }, 60000); // Every minute
+        }
+
+        function updateBusinessRevenues() {
+            // Collect revenue from businesses
+            gameState.businesses.forEach(business => {
+                gameState.bizzy += business.dailyRevenue / 24; // Hourly revenue
+                gameState.experience += 10;
+            });
+            
+            // Pay job salary
+            if (gameState.job) {
+                gameState.bizzy += gameState.job.dailySalary / 24; // Hourly salary
+                gameState.experience += 5;
+            }
+            
+            checkLevelUp();
+            updateUI();
+        }
+
+        function saveGame() {
+            try {
+                localStorage.setItem('bizEmpireSave', JSON.stringify(gameState));
+                addEvent("Game saved successfully.", "info");
+                return true;
+            } catch (error) {
+                console.error('Save error:', error);
+                addEvent("Failed to save game!", "error");
+                return false;
+            }
+        }
+
+        function loadGame() {
+            try {
+                const savedData = localStorage.getItem('bizEmpireSave');
+                if (!savedData) {
+                    addEvent("New game started!", "info");
+                    return false;
+                }
+                
+                const parsedData = JSON.parse(savedData);
+                Object.assign(gameState, parsedData);
+                
+                addEvent("Game loaded successfully.", "success");
+                return true;
+            } catch (error) {
+                console.error('Load error:', error);
+                addEvent("Failed to load game!", "error");
+                return false;
+            }
+        }
+
+        // ====== QUICK ACTIONS ======
+        function quickSave() {
+            if (saveGame()) {
+                alert("Game saved successfully!");
+            }
+        }
+
+        function takeLoan() {
+            const loanAmount = 10000;
+            const interest = 0.2; // 20% interest
+            
+            if (confirm(`Take a loan of $${formatNumber(loanAmount)}?\nYou'll need to repay $${formatNumber(loanAmount * (1 + interest))} in 7 days.`)) {
+                gameState.bizzy += loanAmount;
+                addEvent(`Took a loan of $${formatNumber(loanAmount)}`, "warning");
+                updateUI();
+            }
+        }
+
+        function hireEmployee() {
+            const cost = 5000;
+            if (gameState.bizzy >= cost) {
+                gameState.bizzy -= cost;
+                gameState.employees.push({
+                    id: Date.now(),
+                    name: `Employee ${gameState.employees.length + 1}`,
+                    salary: 500,
+                    productivity: 1.0
+                });
+                addEvent(`Hired a new employee!`, "success");
+                updateUI();
+            } else {
+                alert(`You need $${formatNumber(cost)} to hire an employee!`);
+            }
+        }
+
+        function showUpgrades() {
+            alert("Upgrades feature coming soon!");
+        }
+
+        // ====== MISC FUNCTIONS ======
+        function showJobInfo() {
+            alert("Higher level jobs pay more but require more experience. Complete jobs to level up!");
+        }
+
+        function showCryptoAnalysis() {
+            alert("Crypto market analysis: Prices are volatile. Buy low, sell high!");
+        }
+
+        function showGamblingRules() {
+            alert("Gambling Rules:\n1. You must be 18+ to play\n2. Play responsibly\n3. Never gamble more than you can afford to lose");
+        }
+
+        function showMyRank() {
+            alert(`Your Global Rank: #${gameState.leaderboardRank}\nYour Score: ${formatNumber(gameState.leaderboardScore)}`);
+        }
+
+        function showLevelRewards() {
+            alert("Level Rewards:\n- Every level: Bonus Bizzy\n- Every 5 levels: Career level up\n- Level 50: Prestige unlock");
+        }
+
+        // ====== INITIALIZE GAME ======
+        window.addEventListener('load', initializeGame);
+        
+        // Auto-save every 30 seconds
+        setInterval(() => {
+            if (gameState.autoSave) {
+                saveGame();
+            }
+        }, 30000);
+        
+        // Auto-update crypto prices every 2 minutes
+        setInterval(updateCryptoPrices, 120000);
+    </script>
+</body>
+</html>
